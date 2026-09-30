@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BPSMeter | Transaction cost analysis for stablecoin FX</title>
-<meta name="description" content="Send 90 days of stablecoin payouts. See what you overpaid and where to route the next one. Software only, no custody.">
+<meta name="description" content="Send 90 days of stablecoin payouts. Find out what they cost, what they should have cost, and where the next one should go. Software only, no custody.">
 <meta property="og:title" content="BPSMeter | Transaction cost analysis for stablecoin FX">
-<meta property="og:description" content="Every stablecoin payout, priced against the venues you didn't use. Free cost report.">
+<meta property="og:description" content="Find out what your stablecoin payouts really cost, in basis points. Free cost report.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://bpsmeter.com/">
 <meta property="og:image" content="https://bpsmeter.com/og.png">
@@ -14,260 +14,218 @@
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="canonical" href="https://bpsmeter.com/">
-<meta name="theme-color" content="#09090B">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2309090B'/%3E%3Cpath d='M14 42a18 18 0 0 1 36 0' fill='none' stroke='%23C5F36B' stroke-width='5' stroke-linecap='round'/%3E%3Cpath d='M32 42 42 27' stroke='%23EDEEF0' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
+<meta name="theme-color" content="#0E0B07">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 26'%3E%3Crect width='26' height='26' fill='%230E0B07'/%3E%3Cpath d='M4 18a9 9 0 0 1 18 0' fill='none' stroke='%23FFB547' stroke-width='2.4' stroke-linecap='square'/%3E%3Cpath d='M13 18 18 11' stroke='%23FFB547' stroke-width='2.2'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#09090B; --bg-1:#0D0E11; --panel:#111317; --line:#1F2329; --line-2:#2A2F37;
-    --text:#EDEEF0; --dim:#A3A9B2; --mute:#80868F;
-    --lime:#C5F36B; --lime-ink:#0B0F04; --coral:#FF7B5C;
-    --font:"Geist",-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
+    --bg:#0E0B07; --panel:#14100A; --text:#EDB25C; --bright:#FFD08A; --amber:#FFB547; --dim:#A67C3E; --rule:#3B2E1B;
+    --font:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
   }
   *{box-sizing:border-box}
-  html{scroll-behavior:smooth;-webkit-text-size-adjust:100%;background:var(--bg)}
-  body{margin:0;background:var(--bg);color:var(--dim);font:17px/1.6 var(--font);-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
-  a{color:inherit}
-  a:focus-visible,summary:focus-visible{outline:2px solid var(--lime);outline-offset:3px;border-radius:6px}
-  h1,h2{color:var(--text);margin:0;font-weight:600;letter-spacing:-.035em}
+  html{-webkit-text-size-adjust:100%;background:var(--bg)}
+  body{margin:0;background:var(--bg);color:var(--text);font:16px/1.65 var(--font);-webkit-font-smoothing:antialiased}
+  ::selection{background:var(--amber);color:var(--bg)}
+  a{color:var(--bright);text-decoration:underline;text-decoration-style:dotted;text-underline-offset:4px}
+  a:focus-visible,summary:focus-visible{outline:2px solid var(--amber);outline-offset:3px}
+  h1,h2,h3{color:var(--bright);font-weight:500;margin:0}
   p{margin:0}
-  .wrap{max-width:1160px;margin:0 auto;padding:0 28px}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 40px}
 
-  header{position:sticky;top:0;z-index:20;background:rgba(9,9,11,.8);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
-  .bar{display:flex;align-items:center;justify-content:space-between;height:64px}
-  .logo{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--text);font-weight:600;font-size:18px;letter-spacing:-.02em}
-  nav{display:flex;align-items:center;gap:6px;font-size:15px}
-  nav a{text-decoration:none;color:var(--dim);padding:8px 12px}
-  nav a:hover{color:var(--text)}
-  .btn{display:inline-flex;align-items:center;gap:8px;font:500 15px/1 var(--font);text-decoration:none;padding:13px 20px;border-radius:9px;white-space:nowrap;transition:background .15s,border-color .15s}
-  .btn-lime{background:var(--lime);color:var(--lime-ink)!important;font-weight:600}
-  .btn-lime:hover{background:#D4F88A}
-  .btn-ghost{border:1px solid var(--line-2);color:var(--text)}
-  .btn-ghost:hover{border-color:#3C424B}
-  nav .btn{padding:10px 15px;margin-left:8px}
-  .actions{display:flex;gap:12px;flex-wrap:wrap}
+  header{border-bottom:1px solid var(--rule)}
+  header .wrap{display:flex;align-items:center;justify-content:space-between;height:72px}
+  .mark{display:flex;align-items:center;gap:12px;color:var(--bright);text-decoration:none;font-size:22px;font-weight:600}
+  header nav{display:flex;align-items:center;gap:28px;font-size:15px}
+  header nav a:not(.btn){color:var(--text);text-decoration:none}
+  header nav a:not(.btn):hover{color:var(--bright)}
+  .btn{display:inline-block;background:var(--amber);color:var(--bg)!important;text-decoration:none;font:600 15px/1 var(--font);padding:14px 20px}
+  .btn:hover{background:var(--bright)}
+  header .btn{padding:11px 16px}
 
-  .hero{padding:96px 0 104px}
-  .hero-grid{display:grid;grid-template-columns:1fr 1.1fr;gap:56px;align-items:center}
-  .hero-grid > *{min-width:0}
-  .hero h1{font-size:clamp(42px,4.8vw,64px);line-height:1.03;text-wrap:balance}
-  .hero h1 span{color:var(--lime)}
-  .hero p{font-size:20px;line-height:1.5;color:var(--dim);margin:22px 0 34px;max-width:26em}
+  section{padding:0 0 88px}
+  main section + section > .wrap{position:relative;padding-top:88px}
+  main section + section > .wrap::before{content:"";position:absolute;top:0;left:40px;right:40px;border-top:1px solid var(--rule)}
 
-  .term{background:#060607;border:1px solid var(--line-2);border-radius:12px;overflow:hidden}
-  .tbar{display:flex;align-items:center;gap:6px;padding:12px 14px;border-bottom:1px solid var(--line);background:var(--bg-1)}
-  .tbar i{width:10px;height:10px;border-radius:50%;background:var(--line-2)}
-  .term pre{margin:0;padding:18px 20px;font:400 13px/1.7 "Geist Mono",ui-monospace,Menlo,monospace;color:#C9CED6;white-space:pre-wrap;word-break:break-word}
-  .hero .term pre{height:420px;overflow:hidden}
-  .term .p,.term .ok{color:var(--lime)} .term .bad{color:var(--coral)} .term .m{color:var(--mute)} .term .w{color:var(--text)}
-  .caret{display:inline-block;width:7px;height:15px;background:var(--lime);vertical-align:-2px}
+  .hero{padding:80px 0 96px}
+  .hero .wrap{display:grid;grid-template-columns:.9fr 1.1fr;gap:56px;align-items:center}
+  .hero .wrap > *{min-width:0}
+  .hero h1{font-size:clamp(34px,3.9vw,50px);line-height:1.12;letter-spacing:-.02em}
+  .hero p{font-size:18px;margin:22px 0 0;max-width:30em}
+  .hero p.fact{color:var(--dim);font-size:15px;margin:16px 0 32px}
+  .hero p.fact a{color:var(--text)}
 
-  .figs{border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
-  .figs .wrap{display:grid;grid-template-columns:repeat(3,1fr)}
-  .fig{padding:48px 32px 44px 0}
-  .fig + .fig{padding-left:32px;border-left:1px solid var(--line)}
-  .fig b{display:block;font-size:clamp(44px,4.6vw,60px);line-height:1;font-weight:600;letter-spacing:-.04em;color:var(--text)}
-  .fig b.lime{color:var(--lime)} .fig b.coral{color:var(--coral)}
-  .fig p{margin-top:14px;font-size:16px;color:var(--dim);max-width:19em}
-  .fig a,.fig .src{display:inline-block;margin-top:10px;font-size:13px;color:var(--mute);text-underline-offset:3px}
+  .box{position:relative;border:1px solid var(--rule);background:var(--panel);padding:24px 20px 18px}
+  .box > .lbl{position:absolute;top:-.8em;left:14px;background:var(--bg);padding:0 8px;color:var(--dim);font-size:13px;line-height:1.6}
+  .box pre{margin:0;font:400 13px/1.7 var(--font);color:var(--text);white-space:pre-wrap;overflow-wrap:anywhere}
+  .box pre b{color:var(--bright);font-weight:600}
+  .box pre i{font-style:normal;color:var(--dim)}
+  .box pre .inv{background:var(--amber);color:var(--bg)}
+  .hero .box pre{height:400px;overflow:hidden;white-space:pre-wrap;word-break:break-word}
+  .caret{display:inline-block;width:8px;height:15px;background:var(--amber);vertical-align:-2px;animation:blink 1.1s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
 
-  section{padding:112px 0}
-  h2{font-size:clamp(32px,3.6vw,46px);line-height:1.08}
-  .lead{font-size:19px;color:var(--dim);margin-top:14px;max-width:32em}
-  .shot{margin-top:44px;border:1px solid var(--line-2);border-radius:14px;overflow:hidden;background:var(--panel)}
-  .shot img{display:block;width:100%;height:auto}
-  .more{display:inline-block;margin-top:18px;font-size:15px;color:var(--lime);text-decoration:none}
-  .more:hover{text-decoration:underline;text-underline-offset:4px}
+  h2{font-size:clamp(28px,3vw,38px);line-height:1.15;letter-spacing:-.02em;margin-bottom:14px}
+  .intro{max-width:40em;color:var(--text);margin-bottom:48px}
 
-  .data{display:grid;grid-template-columns:1.1fr .9fr;gap:24px;align-items:start;margin-top:44px}
-  .data > *{min-width:0}
-  .cards{display:grid;gap:12px}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px}
-  .card b{display:block;color:var(--text);font-weight:600;font-size:16px}
-  .card span{display:block;margin-top:4px;font-size:15px;color:var(--dim)}
+  .flow{display:grid;gap:40px}
+  .row{display:grid;grid-template-columns:.75fr 1.25fr;gap:48px;align-items:center}
+  .row > *{min-width:0}
+  .row h3{font-size:20px;margin-bottom:8px}
+  .row p{color:var(--text)}
+  .down{color:var(--dim);font-size:20px;line-height:1;padding-left:2px}
 
-  .rows{margin-top:40px;border-top:1px solid var(--line-2)}
-  .row{display:grid;grid-template-columns:200px 170px 1fr auto;gap:24px;align-items:center;padding:24px 0;border-bottom:1px solid var(--line)}
-  .row b{font-size:18px;color:var(--text);font-weight:600}
-  .row .pr{font-weight:600;color:var(--lime)} .row .pr.w{color:var(--text)}
+  .controls{display:grid;grid-template-columns:1fr 1fr;gap:0 64px}
+  .controls > div{padding:24px 0;border-top:1px solid var(--rule)}
+  .controls h3{font-size:18px;margin-bottom:6px}
 
-  .faq{margin-top:36px;border-top:1px solid var(--line-2)}
-  details{border-bottom:1px solid var(--line)}
-  summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;gap:24px;padding:22px 0;font-size:18px;color:var(--text);font-weight:500}
+  .faq{border-top:1px solid var(--rule);max-width:860px}
+  details{border-bottom:1px solid var(--rule)}
+  summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;gap:24px;padding:18px 0;color:var(--bright);font-size:17px}
   summary::-webkit-details-marker{display:none}
-  summary:after{content:"+";color:var(--mute);font-size:22px;line-height:1}
-  details[open] summary:after{content:"\2212"}
-  details p{padding:0 0 22px;max-width:44em;color:var(--dim)}
+  summary:after{content:"[+]";color:var(--dim)}
+  details[open] summary:after{content:"[-]"}
+  details p{padding:0 0 20px;max-width:48em}
 
-  .close{text-align:center;border-top:1px solid var(--line)}
-  .close h2{font-size:clamp(34px,4.2vw,54px);max-width:13em;margin:0 auto 32px}
-  .close .actions{justify-content:center}
+  .close h2{margin-bottom:14px}
+  .close p{margin-bottom:30px;max-width:40em}
 
-  footer{padding:36px 0;font-size:14px;color:var(--mute);border-top:1px solid var(--line)}
-  .frow{display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap}
-  footer a{color:var(--dim);text-decoration:none}
+  footer{border-top:1px solid var(--rule);padding:28px 0;font-size:14px;color:var(--dim)}
+  footer .wrap{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap}
+  footer a{color:var(--text)}
 
-  @media (max-width:1000px){
-    .hero-grid,.data{grid-template-columns:1fr;gap:40px}
-    .figs .wrap{grid-template-columns:1fr}
-    .fig,.fig + .fig{padding:32px 0;border-left:0}
-    .fig + .fig{border-top:1px solid var(--line)}
-    .row{grid-template-columns:1fr auto;gap:6px 16px}
-    .row p{grid-column:1/-1}
-    .row .btn{grid-column:1/-1;justify-self:start}
-    nav a:not(.btn){display:none}
-    section{padding:80px 0}
+  @media (max-width:920px){
+    header nav a:not(.btn){display:none}
+    .hero .wrap,.row,.controls{grid-template-columns:1fr;gap:28px}
     .hero{padding:56px 0 72px}
+    .hero .box pre{height:320px;font-size:12px}
+    section{padding:0 0 64px}
+    main section + section > .wrap{padding-top:64px}
   }
-  @media (max-width:640px){
-    .wrap{padding:0 18px}
-    .hero h1{font-size:40px}
-    .hero .term pre{height:340px;font-size:11.5px}
-    .term pre{font-size:11.5px}
+  @media (max-width:560px){
+    .wrap{padding:0 20px}
+    main section + section > .wrap::before{left:20px;right:20px}
+    body{font-size:15px}
+    .hero h1{font-size:32px}
+    .box pre{font-size:11.5px}
   }
+  @media (prefers-reduced-motion:reduce){.caret{animation:none}}
 </style>
 </head>
 <body>
 
 <header>
-  <div class="wrap bar">
-    <a class="logo" href="#top" aria-label="BPSMeter home">
-      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><path d="M4 18a9 9 0 0 1 18 0" fill="none" stroke="#2A2F37" stroke-width="3" stroke-linecap="round"/><path d="M4 18a9 9 0 0 1 5.2-8.2" fill="none" stroke="#C5F36B" stroke-width="3" stroke-linecap="round"/><path d="M13 18 18.2 10.6" stroke="#EDEEF0" stroke-width="2.2" stroke-linecap="round"/><circle cx="13" cy="18" r="2.2" fill="#EDEEF0"/></svg>
-      BPSMeter
+  <div class="wrap">
+    <a class="mark" href="#top" aria-label="BPSMeter home">
+      <svg width="30" height="30" viewBox="0 0 26 26" aria-hidden="true"><path d="M4 18a9 9 0 0 1 18 0" fill="none" stroke="#FFB547" stroke-width="2.4" stroke-linecap="square"/><path d="M13 18 18 11" stroke="#FFD08A" stroke-width="2.2"/></svg>
+      bpsmeter
     </a>
     <nav>
-      <a href="#report">Sample report</a>
-      <a href="#faq">FAQ</a>
-      <a class="btn btn-lime" href="mailto:hello@bpsmeter.com?subject=Free%20cost%20report">Get a free report</a>
+      <a href="#how">How it works</a>
+      <a href="#data">Your data</a>
+      <a href="#faq">Questions</a>
+      <a class="btn" href="mailto:hello@bpsmeter.com?subject=Free%20cost%20report">Free cost report</a>
     </nav>
   </div>
 </header>
 
 <main id="top">
 <section class="hero">
-  <div class="wrap hero-grid">
+  <div class="wrap">
     <div>
-      <h1>Your stablecoin FX, measured to the <span>basis point.</span></h1>
-      <p>Send 90 days of payouts. See what you overpaid and where to route the next one.</p>
-      <div class="actions">
-        <a class="btn btn-lime" href="mailto:hello@bpsmeter.com?subject=Free%20cost%20report">Get a free cost report &rarr;</a>
-        <a class="btn btn-ghost" href="samples/bpsmeter-sample-cost-report.pdf">Sample report (PDF)</a>
-      </div>
+      <h1>What did your stablecoin payouts really cost?</h1>
+      <p>Send 90 days of payouts. We reprice every one against the venues that could have filled it and tell you, in basis points, what you overpaid and where the next one should go.</p>
+      <p class="fact">Businesses wired to a single provider pay <a href="https://www.theblock.co/post/408006/stablecoin-fx-priced-below-interbank-rates-in-q2-with-routing-now-the-biggest-cost-lever-borderless">about $2,330 more per $1M</a> than the best available price.</p>
+      <a class="btn" href="mailto:hello@bpsmeter.com?subject=Free%20cost%20report">Request a free cost report</a>
     </div>
-    <div class="term" aria-label="A real BPSMeter run on a sample payout file">
-      <div class="tbar"><i></i><i></i><i></i></div>
-<pre id="hero-pre"><span class="p">$</span> node cli.mjs anonymize --fills payouts-90d.csv --out safe.csv
+    <div class="box" aria-label="A real BPSMeter run on a sample payout file">
+      <span class="lbl">~/payouts</span>
+<pre id="run"><b>$</b> node cli.mjs anonymize --fills payouts-90d.csv --out safe.csv
 anonymized 128 fill(s) → safe.csv
 kept (safe to send): date, corridor, provider, notional_usd, fee_usd, bps
 dropped (never leaves your machine): Status, Payment ID
 
-<span class="p">$</span> node cli.mjs tca --fills safe.csv --client "Sample PSP" --quotes quotes/live-quotes-2026-09-16T02-20-07Z.json --out out
+<b>$</b> node cli.mjs tca --fills safe.csv --client "Sample PSP" --quotes quotes/live-quotes-2026-09-16T02-20-07Z.json --out out
 paid 31.4bps · best single venue 12.7bps · best split 12.7bps
 addressable gap $130,193 over the period · $533,939 annualized</pre>
     </div>
   </div>
 </section>
 
-<div class="figs">
+<section id="how">
   <div class="wrap">
-    <div class="fig"><b class="lime">$2,330</b><p>extra paid per $1M by businesses that stick with one provider.</p><a href="https://www.theblock.co/post/408006/stablecoin-fx-priced-below-interbank-rates-in-q2-with-routing-now-the-biggest-cost-lever-borderless">Borderless, Q2 2026</a></div>
-    <div class="fig"><b>34</b><p>times the cheapest USDT to BRL provider changed in 88 days.</p><a href="https://www.theblock.co/post/408006/stablecoin-fx-priced-below-interbank-rates-in-q2-with-routing-now-the-biggest-cost-lever-borderless">Borderless, Q2 2026</a></div>
-    <div class="fig"><b class="coral">4.5&times;</b><p>what a $2M ticket costs on Kraken EUR/USD versus $50k.</p><span class="src">Measured by BPSMeter, 30 Sep 2026</span></div>
-  </div>
-</div>
-
-<section id="report">
-  <div class="wrap">
-    <h2>See what you overpaid</h2>
-    <p class="lead">Every payout repriced against the venues that could have filled it.</p>
-    <div class="shot"><img src="assets/bps-report-top.webp" width="1720" height="1094" alt="Sample BPSMeter report: $533,939 annualized gap, 31.4 bps paid against 12.7 bps at the best single venue" loading="lazy"></div>
-    <a class="more" href="samples/bpsmeter-sample-cost-report.pdf">Open the full sample report &rarr;</a>
-  </div>
-</section>
-
-<section style="padding-top:0">
-  <div class="wrap">
-    <h2>See where the gap sits</h2>
-    <p class="lead">By corridor, provider and month.</p>
-    <div class="shot"><img src="assets/bps-report-corridors.webp" width="1720" height="1304" alt="Cost by corridor: USD to COP paid 142.1 bps against 20.0 bps available" loading="lazy"></div>
-  </div>
-</section>
-
-<section style="padding-top:0">
-  <div class="wrap">
-    <h2>Know where the next ticket goes</h2>
-    <p class="lead">A routing sheet by ticket size. Your desk executes, we never do.</p>
-    <div class="shot"><img src="assets/bps-sheet-cop-crop.webp" width="1720" height="1031" alt="Routing sheet for USD to COP: which venue to use at each ticket size" loading="lazy"></div>
-    <a class="more" href="samples/bpsmeter-sample-routing-sheet.pdf">Open the sample routing sheet &rarr;</a>
-  </div>
-</section>
-
-<section id="data" style="border-top:1px solid var(--line)">
-  <div class="wrap">
-    <h2>We see six columns. Nothing else.</h2>
-    <div class="data">
-      <div class="term">
-        <div class="tbar"><i></i><i></i><i></i></div>
-<pre><span class="p">$</span> node cli.mjs anonymize --fills payouts-90d.csv --out safe.csv
-anonymized 128 fill(s) → safe.csv
-<span class="ok">kept</span> (safe to send): date, corridor, provider, notional_usd, fee_usd, bps
-<span class="bad">dropped</span> (never leaves your machine): Status, Payment ID
-note: 3 unparseable row(s) were left out
-
-<span class="m">sha256</span> payouts-90d.csv  3b9e06753dacecad6b83077d2930bad3109241ba7aeebf56c376072671aa58db
-<span class="m">sha256</span> <span class="w">safe.csv  75d4f0de70b94ff4ddfb185d37868b07007df632e9807ba71f15536db6b40300</span></pre>
+    <h2>How it works</h2>
+    <p class="intro">No integration and nothing to connect. You export a file, strip it on your own machine, and we send back the analysis.</p>
+    <div class="flow">
+      <div class="row">
+        <div><h3>You export your payouts</h3><p>30 to 90 days of stablecoin payouts, straight from your system. Any CSV or JSON layout works.</p></div>
+        <div class="box"><span class="lbl">payouts-90d.csv</span>
+<pre>Payment ID,Value Date,Currency Pair,Liquidity Provider,Amount (USD),Total Fee USD,Status
+PAY-100406,2026-06-17,USD/BRL,"Bitso Business","$554,500.00","1,990.32",SETTLED
+PAY-100476,2026-06-18,USD/BRL,"Bitso Business","$290,400.00","936.17",SETTLED</pre></div>
       </div>
-      <div class="cards">
-        <div class="card"><b>Runs on your machine</b><span>The anonymizer strips everything else before you send.</span></div>
-        <div class="card"><b>Fingerprinted</b><span>Your report prints the same SHA-256 as the file you sent.</span></div>
-        <div class="card"><b>No custody, no logins</b><span>We never hold funds or place a trade.</span></div>
-        <div class="card"><b>Deleted on request</b><span>Under a mutual NDA and data processing agreement.</span></div>
+      <div class="down" aria-hidden="true">↓</div>
+      <div class="row">
+        <div><h3>You strip it on your machine</h3><p>Our anonymizer keeps six columns, drops everything else, and prints a fingerprint of the file you send.</p></div>
+        <div class="box"><span class="lbl">your machine</span>
+<pre><b>$</b> node cli.mjs anonymize --fills payouts-90d.csv --out safe.csv
+<b>kept</b> (safe to send): date, corridor, provider, notional_usd, fee_usd, bps
+<b>dropped</b> (never leaves your machine): Status, Payment ID
+<i>sha256</i> safe.csv  75d4f0de70b94ff4ddfb185d37868b07007df632e9807ba71f15536db6b40300</pre></div>
+      </div>
+      <div class="down" aria-hidden="true">↓</div>
+      <div class="row">
+        <div><h3>We send back your number</h3><p>What you paid, what the best venue would have charged, the gap by corridor, and a routing sheet for the next ticket.</p></div>
+        <div class="box"><span class="lbl">cost report</span>
+<pre>paid 31.4bps · best single venue 12.7bps · best split 12.7bps
+addressable gap $130,193 over the period · $533,939 annualized
+  USD-COP    22 fills    $6,740,700  paid  142.1bps  best  20.0bps  gap   $82,307  <span class="inv">ACTIONABLE</span>
+  USD-MXN    34 fills   $15,590,100  paid   24.0bps  best  10.4bps  gap   $21,124  <span class="inv">ACTIONABLE</span></pre></div>
       </div>
     </div>
   </div>
 </section>
 
-<section id="pricing" style="border-top:1px solid var(--line)">
+<section id="data">
   <div class="wrap">
-    <h2>Start with the free report</h2>
-    <div class="rows">
-      <div class="row"><b>Cost report</b><span class="pr">Free</span><p>90 days of payouts, fully repriced.</p><a class="btn btn-lime" href="mailto:hello@bpsmeter.com?subject=Free%20cost%20report">Request</a></div>
-      <div class="row"><b>Routing</b><span class="pr w">Monthly</span><p>The sheet rebuilt each month, priced on volume.</p><a class="btn btn-ghost" href="mailto:hello@bpsmeter.com?subject=Routing">Talk to us</a></div>
-      <div class="row"><b>API</b><span class="pr w">Design partners</span><p>Route and expected cost before each ticket goes out.</p><a class="btn btn-ghost" href="mailto:hello@bpsmeter.com?subject=API">Ask about access</a></div>
+    <h2>What happens to your data</h2>
+    <p class="intro">We only ever see the six columns the analysis needs.</p>
+    <div class="controls">
+      <div><h3>It runs on your machine</h3><p>The anonymizer is a small script with no dependencies and no network calls. You can read it before you run it.</p></div>
+      <div><h3>Every file fingerprinted</h3><p>The anonymizer prints a SHA-256 of the file you send, and your report prints the same one, so you can confirm it was built from that file.</p></div>
+      <div><h3>No custody, no logins</h3><p>We never hold funds, never ask for venue credentials and never place a trade. Your desk executes everything.</p></div>
+      <div><h3>Used once</h3><p>Your file is used for your report and deleted on request, under a mutual NDA and a data processing agreement.</p></div>
     </div>
   </div>
 </section>
 
-<section id="faq" style="border-top:1px solid var(--line)">
+<section id="faq">
   <div class="wrap">
     <h2>Questions</h2>
     <div class="faq">
-      <details><summary>What do you need from us?</summary><p>A CSV or JSON export of 30 to 90 days of stablecoin payouts, run through the anonymizer first.</p></details>
-      <details><summary>Do you hold funds or execute trades?</summary><p>No. We quote, route and score. Your desk executes on its own accounts.</p></details>
-      <details><summary>Which corridors do you cover?</summary><p>USD to EUR, MXN, BRL, COP and NGN. Tickets in other corridors are listed in the report, never dropped.</p></details>
-      <details><summary>Where do venue prices come from?</summary><p>Public quotes read at several ticket sizes. Private OTC and off-ramp prices are modeled and labeled estimate.</p></details>
-      <details><summary>How do I know the report used my file?</summary><p>Compare the SHA-256 the anonymizer prints with the one in your report, or run <code>shasum -a 256</code> yourself.</p></details>
-      <details><summary>How long does it take?</summary><p>A few days from receiving the file.</p></details>
+      <details><summary>Who is BPSMeter for?</summary><p>Payment companies, payout platforms and remittance firms that convert stablecoins into local currency, especially across more than one provider.</p></details>
+      <details><summary>Which corridors do you cover?</summary><p>USD to EUR, MXN, BRL, COP and NGN today. Payouts in other corridors are still listed in your report, never dropped.</p></details>
+      <details><summary>Where do the venue prices come from?</summary><p>Public quotes read at several ticket sizes wherever a venue publishes them, including exchange order books and on-chain aggregators. OTC desks and off-ramps quote privately, so their prices are modeled and clearly marked as estimates.</p></details>
+      <details><summary>Do you execute or hold funds?</summary><p>No. BPSMeter is analytics software. We quote, route and score, and your team executes on its own accounts.</p></details>
+      <details><summary>What does it cost?</summary><p>The first cost report is free. After that, a routing sheet rebuilt each month on fresh quotes, priced on volume.</p></details>
+      <details><summary>Can we see a sample report?</summary><p>Yes. Write to <a href="mailto:hello@bpsmeter.com?subject=Sample%20report">hello@bpsmeter.com</a> and we'll send one built from a sample payout file.</p></details>
     </div>
   </div>
 </section>
 
 <section class="close">
   <div class="wrap">
-    <h2>Send 90 days of payouts. Get your number back.</h2>
-    <div class="actions">
-      <a class="btn btn-lime" href="mailto:hello@bpsmeter.com?subject=Free%20cost%20report">Get a free cost report &rarr;</a>
-      <a class="btn btn-ghost" href="mailto:hello@bpsmeter.com">hello@bpsmeter.com</a>
-    </div>
+    <h2>Send us 90 days of payouts.</h2>
+    <p>We'll come back with your all-in cost, the gap by corridor and where the next ticket should go.</p>
+    <a class="btn" href="mailto:hello@bpsmeter.com?subject=Free%20cost%20report">Request a free cost report</a>
   </div>
 </section>
 </main>
 
 <footer>
-  <div class="wrap frow">
-    <span>&copy; 2026 BPSMeter. Analytics software. We don't hold funds or execute payments. Sample figures use a synthetic book.</span>
+  <div class="wrap">
+    <span>&copy; 2026 BPSMeter. Analytics software. We don't hold funds or execute payments.</span>
     <a href="mailto:hello@bpsmeter.com">hello@bpsmeter.com</a>
   </div>
 </footer>
@@ -277,42 +235,37 @@ note: 3 unparseable row(s) were left out
   const RUN=[
     {cmd:'node cli.mjs anonymize --fills payouts-90d.csv --out safe.csv',out:[
       'anonymized 128 fill(s) → safe.csv',
-      '@okkept@ (safe to send): date, corridor, provider, notional_usd, fee_usd, bps',
-      '@baddropped@ (never leaves your machine): Status, Payment ID',
+      '@bkept@ (safe to send): date, corridor, provider, notional_usd, fee_usd, bps',
+      '@bdropped@ (never leaves your machine): Status, Payment ID',
       'note: 3 unparseable row(s) were left out','',
-      '@msha256@ payouts-90d.csv  3b9e06753dacecad6b83077d2930bad3109241ba7aeebf56c376072671aa58db',
-      '@msha256@ safe.csv  75d4f0de70b94ff4ddfb185d37868b07007df632e9807ba71f15536db6b40300','']},
+      '@isha256@ safe.csv  75d4f0de70b94ff4ddfb185d37868b07007df632e9807ba71f15536db6b40300','']},
     {cmd:'node cli.mjs tca --fills safe.csv --client "Sample PSP" --quotes quotes/live-quotes-2026-09-16T02-20-07Z.json --out out',out:[
       'ingested 128 fills from safe.csv (csv); 0 row(s) unusable',
       'period 2026-06-17 → 2026-09-13 (89d), $69,727,500 notional',
-      '@wpaid 31.4bps · best single venue 12.7bps · best split 12.7bps@',
-      '@waddressable gap $130,193 over the period · $533,939 annualized@',
-      '  USD-COP    22 fills    $6,740,700  paid  142.1bps  best  20.0bps  gap   $82,307  @badACTIONABLE@',
-      '  USD-MXN    34 fills   $15,590,100  paid   24.0bps  best  10.4bps  gap   $21,124  @badACTIONABLE@',
-      '  USD-BRL    26 fills   $12,661,200  paid   29.7bps  best  15.0bps  gap   $18,596  @badACTIONABLE@',
-      '  USD-EUR    20 fills   $33,896,600  paid   12.0bps  best  10.0bps  gap    $6,803',
-      '  USD-NGN    18 fills      $838,900  paid   86.2bps  best  70.0bps  gap    $1,363  @badACTIONABLE@',
+      '@bpaid 31.4bps · best single venue 12.7bps · best split 12.7bps@',
+      '@baddressable gap $130,193 over the period · $533,939 annualized@',
+      '  USD-COP    22 fills    $6,740,700  paid  142.1bps  best  20.0bps  gap   $82,307  @vACTIONABLE@',
+      '  USD-MXN    34 fills   $15,590,100  paid   24.0bps  best  10.4bps  gap   $21,124  @vACTIONABLE@',
+      '  USD-BRL    26 fills   $12,661,200  paid   29.7bps  best  15.0bps  gap   $18,596  @vACTIONABLE@',
       'wrote out/shadow-tca-sample-psp-2026-06-17-to-2026-09-13.html']}
   ];
-  const pre=document.getElementById('hero-pre');
+  const pre=document.getElementById('run');
   const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;');
-  const fmt=s=>esc(s).replace(/@(ok|bad|m|w)(.*?)@/g,'<span class="$1">$2</span>');
+  const fmt=s=>esc(s).replace(/@b(.*?)@/g,'<b>$1</b>').replace(/@i(.*?)@/g,'<i>$1</i>').replace(/@v(.*?)@/g,'<span class="inv">$1</span>');
   const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   async function play(){
     let html='';
     const draw=(tail='')=>{pre.innerHTML=html+tail;pre.scrollTop=pre.scrollHeight};
     for(const step of RUN){
       let typed='';
-      for(const ch of step.cmd){typed+=ch;draw('<span class="p">$</span> '+esc(typed)+'<span class="caret"></span>');await sleep(24)}
-      html+='<span class="p">$</span> '+esc(step.cmd)+'\n';draw();await sleep(400);
+      for(const ch of step.cmd){typed+=ch;draw('<b>$</b> '+esc(typed)+'<span class="caret"></span>');await sleep(24)}
+      html+='<b>$</b> '+esc(step.cmd)+'\n';draw();await sleep(400);
       for(const line of step.out){html+=fmt(line)+'\n';draw();await sleep(line?80:160)}
       await sleep(800);
     }
-    draw('<span class="p">$</span> <span class="caret"></span>');
+    draw('<b>$</b> <span class="caret"></span>');
   }
-  if(!matchMedia('(prefers-reduced-motion: reduce)').matches){
-    (async()=>{while(true){await play();await sleep(6000)}})();
-  }
+  if(!matchMedia('(prefers-reduced-motion: reduce)').matches){(async()=>{while(true){await play();await sleep(6000)}})();}
 </script>
 </body>
 </html>
