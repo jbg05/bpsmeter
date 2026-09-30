@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Rhumb | Stablecoin FX best execution</title>
-<meta name="description" content="Rhumb prices every stablecoin FX payment you made against the venues that could have filled it, and shows you what single-sourcing is costing you.">
+<title>BPSMeter | Stablecoin FX best execution</title>
+<meta name="description" content="BPSMeter prices every stablecoin FX payment you made against the venues that could have filled it, and shows you what single-sourcing is costing you.">
 <style>
   :root{--ink:#0f1b2d;--body:#31415a;--muted:#6b7890;--faint:#9aa4b8;--rule:#e6eaf1;--bg:#ffffff;--soft:#f5f8fc;--accent:#0e7c66;--accent-ink:#0a5c4c;--accent-bg:#e6f4f0;--code-bg:#0d1826;--code-ink:#d7e3f4}
   *{box-sizing:border-box}html{scroll-behavior:smooth}
@@ -60,8 +60,8 @@
 </style></head><body id="top">
 
 <nav><div class="wrap">
-  <a class="brand" href="#top"><span class="dot"></span>Rhumb</a>
-  <div class="navlinks"><a href="#how">How it works</a><a href="#pricing">Pricing</a><a href="#security">Security</a><a href="mailto:24juanb@berkeley.edu?subject=Free%20cost%20report" class="cta">Get a free report</a></div>
+  <a class="brand" href="#top"><span class="dot"></span>BPSMeter</a>
+  <div class="navlinks"><a href="#how">How it works</a><a href="#pricing">Pricing</a><a href="#security">Security</a><a href="mailto:hello@bpsmeter.com?subject=Free%20cost%20report" class="cta">Get a free report</a></div>
 </div></nav>
 
 <header class="hero"><div class="wrap">
@@ -69,7 +69,7 @@
   <h1>Find out what your stablecoin FX is really costing you.</h1>
   <p class="sub">Send us your last 90 days of stablecoin payouts. We price every ticket against the venues that could have filled it, then tell you in basis points how much you left on the table and where the next payment should go.</p>
   <div class="btnrow">
-    <a href="mailto:24juanb@berkeley.edu?subject=Free%20cost%20report" class="btn primary">Get a free cost report</a>
+    <a href="mailto:hello@bpsmeter.com?subject=Free%20cost%20report" class="btn primary">Get a free cost report</a>
     <a href="#how" class="btn ghost">How it works</a>
   </div>
   <p class="heronote">No integration and no custody. Our anonymizer runs on your machine first, so all we ever see is corridor, size, provider and fee.</p>
@@ -133,8 +133,8 @@
   <div class="codewrap">
     <div class="codebar">POST /v1/route (design partners)</div>
 <pre><span class="c-c"># ask for the best route before a payment goes out</span>
-<span class="c-k">curl</span> https://api.rhumbfx.com/v1/route \
-  -H <span class="c-s">"Authorization: Bearer $RHUMB_KEY"</span> \
+<span class="c-k">curl</span> https://api.bpsmeter.com/v1/route \
+  -H <span class="c-s">"Authorization: Bearer $BPSMETER_KEY"</span> \
   -d <span class="c-s">'{ "corridor": "USD-COP", "notional": 250000, "deadline": "2m" }'</span>
 
 <span class="c-c"># returns the split, the all-in cost in bps, and the quotes behind it</span>
@@ -157,7 +157,7 @@
 </div></section>
 
 <footer><div class="wrap">
-  <div>© 2026 Rhumb</div>
-  <div><a href="mailto:24juanb@berkeley.edu?subject=Free%20cost%20report">24juanb@berkeley.edu</a></div>
+  <div>© 2026 BPSMeter</div>
+  <div><a href="mailto:hello@bpsmeter.com?subject=Free%20cost%20report">hello@bpsmeter.com</a></div>
 </div></footer>
 </body></html>
