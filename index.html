@@ -62,8 +62,6 @@
   .hero h1{font-size:clamp(40px,4.5vw,60px);line-height:1.03;letter-spacing:-.04em;text-wrap:balance}
   .hero h1 span{color:var(--lime)}
   .hero .sub{font-size:18.5px;line-height:1.6;color:var(--dim);margin:22px 0 0;max-width:30em}
-  .hero .fact{font-size:14.5px;color:var(--mute);margin:14px 0 30px;max-width:32em}
-  .hero .fact a{color:var(--text);text-underline-offset:3px}
   .actions{display:flex;gap:12px;flex-wrap:wrap}
 
   /* terminal panels */
@@ -82,32 +80,17 @@
   .chips button{font:500 12.5px/1 var(--mono);color:var(--lime);background:transparent;border:1px solid var(--line-2);border-radius:6px;padding:8px 10px;cursor:pointer}
   .chips button:hover{border-color:var(--lime)}
 
-  /* numbers */
-  .nums{border-bottom:1px solid var(--line);background:var(--bg-1)}
-  .nums .wrap{display:grid;grid-template-columns:repeat(3,1fr)}
-  .num{padding:44px 32px 40px 0}
-  .num + .num{padding-left:32px;border-left:1px solid var(--line)}
-  .num .v{font:600 clamp(40px,4.4vw,56px)/1 var(--sans);color:var(--text);letter-spacing:-.04em}
-  .num .v.lime{color:var(--lime)} .num .v.coral{color:var(--coral)}
-  .num p{margin-top:14px;font-size:15px;color:var(--dim);max-width:21em}
-  .num .src{margin-top:10px;font:500 11.5px/1.5 var(--mono);color:var(--mute)}
-  .num .src a{color:var(--mute);text-underline-offset:3px}
-
   /* data */
-  .data{display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start}
+  .data{display:grid;grid-template-columns:.95fr 1.05fr;gap:72px;align-items:start}
   .data > *{min-width:0}
-  .cards{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px 20px 22px}
-  .card h3{font-size:16px;letter-spacing:-.01em;margin-bottom:8px}
-  .card p{font-size:14.5px;color:var(--dim)}
-
-  /* what you get */
-  .get{display:grid;grid-template-columns:.9fr 1.1fr;gap:48px;align-items:start}
-  .get > *{min-width:0}
-  .checks{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
-  .checks li{display:grid;grid-template-columns:28px 1fr;gap:6px;padding:16px 0;border-bottom:1px solid var(--line);font-size:15.5px;color:var(--text)}
-  .checks li:before{content:"+";font-family:var(--mono);color:var(--lime)}
-  .checks li span{display:block;color:var(--dim);font-size:14.5px;margin-top:4px}
+  .data .lead{font-size:17.5px;line-height:1.65;margin:22px 0 30px;max-width:30em}
+  .cols{display:flex;flex-wrap:wrap;gap:8px 0;font:500 14px/1 var(--mono);color:var(--lime)}
+  .cols i{font-style:normal}
+  .cols i:before{content:"\00b7";color:var(--mute);margin:0 10px}
+  .points{margin:0;border-top:1px solid var(--line-2)}
+  .points div{display:grid;grid-template-columns:200px 1fr;gap:24px;padding:22px 0;border-bottom:1px solid var(--line)}
+  .points dt{color:var(--text);font-weight:500;font-size:16px}
+  .points dd{margin:0;font-size:15.5px;color:var(--dim)}
 
   /* pricing */
   .tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
@@ -141,11 +124,8 @@
   footer a{color:var(--dim);text-decoration:none}
 
   @media (max-width:1000px){
-    .hero-grid,.shead,.data,.get{grid-template-columns:1fr;gap:28px}
+    .hero-grid,.shead,.data{grid-template-columns:1fr;gap:28px}
     .tiers{grid-template-columns:1fr}
-    .nums .wrap{grid-template-columns:1fr}
-    .num,.num + .num{padding:30px 0;border-left:0}
-    .num + .num{border-top:1px solid var(--line)}
     nav.links a:not(.btn){display:none}
     section{padding:80px 0}
     .hero{padding:56px 0 76px}
@@ -153,7 +133,7 @@
   @media (max-width:640px){
     .wrap{padding:0 18px}
     .hero h1{font-size:38px}
-    .cards{grid-template-columns:1fr}
+    .points div{grid-template-columns:1fr;gap:6px}
     #shell pre{height:320px}
     .term pre{font-size:12px}
   }
@@ -170,7 +150,6 @@
     </a>
     <nav class="links">
       <a href="#data">Your data</a>
-      <a href="#get">What you get</a>
       <a href="#pricing">Pricing</a>
       <a href="#faq">Questions</a>
       <a class="btn btn-lime" href="mailto:hello@bpsmeter.com?subject=Free%20cost%20report">Get a free report</a>
@@ -183,8 +162,7 @@
   <div class="wrap hero-grid">
     <div>
       <h1>Your stablecoin FX, measured to the <span>basis point.</span></h1>
-      <p class="sub">Send 90 days of payouts. We reprice every one against the venues that could have filled it and show you what you overpaid and where the next one should go.</p>
-      <p class="fact">Businesses wired to a single provider pay <a href="https://www.theblock.co/post/408006/stablecoin-fx-priced-below-interbank-rates-in-q2-with-routing-now-the-biggest-cost-lever-borderless">about $2,330 more per $1M</a> than the best available price.</p>
+      <p class="sub" style="margin-bottom:34px">Send 90 days of payouts. We reprice every one against the venues that could have filled it and show you what you overpaid and where the next one should go.</p>
       <div class="actions">
         <a class="btn btn-lime" href="mailto:hello@bpsmeter.com?subject=Free%20cost%20report">Get a free cost report</a>
         <a class="btn btn-ghost" href="#pricing">See pricing</a>
@@ -212,72 +190,19 @@
   </div>
 </section>
 
-<div class="nums">
-  <div class="wrap">
-    <div class="num"><div class="v lime">$2,330</div><p>extra paid per $1M by businesses that stick with one provider.</p><div class="src"><a href="https://www.theblock.co/post/408006/stablecoin-fx-priced-below-interbank-rates-in-q2-with-routing-now-the-biggest-cost-lever-borderless">Borderless, Q2 2026</a></div></div>
-    <div class="num"><div class="v">34</div><p>times the cheapest USDT to BRL provider changed in 88 days.</p><div class="src"><a href="https://www.theblock.co/post/408006/stablecoin-fx-priced-below-interbank-rates-in-q2-with-routing-now-the-biggest-cost-lever-borderless">Borderless, Q2 2026</a></div></div>
-    <div class="num"><div class="v coral">9.2&times;</div><p>what a $2M ticket costs on Kraken EUR versus $50k, in the same minute.</p><div class="src">Measured by BPSMeter, 16 Sep 2026</div></div>
-  </div>
-</div>
-
 <section id="data">
-  <div class="wrap">
-    <div class="shead">
-      <h2>We see six columns. Nothing else.</h2>
-      <p>Our anonymizer runs on your machine first, keeps only what the analysis needs, and hashes the file you send so you can prove what the report was built from.</p>
-    </div>
-    <div class="data">
-      <div class="term">
-        <div class="ptop"><span class="path">your machine</span><span>no network calls</span></div>
-<pre><span class="p">$</span> node cli.mjs anonymize --fills payouts-90d.csv --out safe.csv
-anonymized 128 fill(s) → safe.csv
-<span class="ok">kept</span> (safe to send): date, corridor, provider, notional_usd, fee_usd, bps
-<span class="dr">dropped</span> (never leaves your machine): Status, Payment ID
-note: 3 unparseable row(s) were left out
-
-<span class="m">sha256</span> payouts-90d.csv  <span class="y">3b9e06753dacecad6b83077d2930bad3109241ba7aeebf56c376072671aa58db</span>
-<span class="m">sha256</span> safe.csv  <span class="y">75d4f0de70b94ff4ddfb185d37868b07007df632e9807ba71f15536db6b40300</span>
-
-Review safe.csv. It is the only file you would send, and the report you get back names this same fingerprint.</pre>
-      </div>
-      <div class="cards">
-        <div class="card"><h3>Runs on your machine</h3><p>A small script with no dependencies and no network calls. Read it before you run it.</p></div>
-        <div class="card"><h3>SHA-256 fingerprint</h3><p>The file you send is hashed, and your report prints the same hash, so you can prove it was built from that exact file.</p></div>
-        <div class="card"><h3>No custody, no logins</h3><p>We never hold funds, never ask for venue credentials and never place a trade.</p></div>
-        <div class="card"><h3>Used once</h3><p>Deleted on request, under a mutual NDA and a data processing agreement. Or share your screen and send nothing.</p></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="get">
-  <div class="wrap get">
+  <div class="wrap data">
     <div>
-      <h2 style="margin-bottom:28px">What you get back</h2>
-      <ul class="checks">
-        <li><div>A cost report<span>Every payout repriced against the cheapest venue that would have taken that exact ticket, by corridor, provider and month.</span></div></li>
-        <li><div>A routing sheet<span>For each corridor, the venue to use at each ticket size, back-tested on your own flow. Your desk executes.</span></div></li>
-        <li><div>Nothing silently dropped<span>Tickets we can't price are listed with the reason, next to what you paid for them.</span></div></li>
-        <li><div>PDF and JSON<span>A document for your finance team and the raw data for your engineers.</span></div></li>
-      </ul>
+      <h2>We see six columns. Nothing else.</h2>
+      <p class="lead">Our anonymizer runs on your machine first, keeps only what the analysis needs, and hashes the file you send so you can prove what the report was built from.</p>
+      <div class="cols">date<i>corridor</i><i>provider</i><i>notional_usd</i><i>fee_usd</i><i>bps</i></div>
     </div>
-    <div class="term">
-      <div class="ptop"><span class="path">shadow-tca-sample-psp.json</span><span class="tag">excerpt</span></div>
-<pre>{
-  <span class="k">"client"</span>: <span class="y">"Sample PSP"</span>,
-  <span class="k">"sourceSha256"</span>: [{ <span class="k">"file"</span>: <span class="y">"safe.csv"</span>, <span class="k">"sha256"</span>: <span class="y">"75d4f0de70b94ff4ddfb185d37868b07007df632e9807ba71f15536db6b40300"</span> }],
-  <span class="k">"total"</span>: {
-    <span class="k">"fills"</span>: <span class="p">120</span>,
-    <span class="k">"notionalUsd"</span>: <span class="p">69727500</span>,
-    <span class="k">"paidBps"</span>: <span class="p">31.359050589796</span>,
-    <span class="k">"bestSingleBps"</span>: <span class="p">12.68731275321788</span>,
-    <span class="k">"leakageVsSingleUsd"</span>: <span class="p">130193.36000000007</span>
-  },
-  <span class="k">"byCorridor"</span>: [
-    { <span class="k">"corridor"</span>: <span class="y">"USD-COP"</span>, <span class="k">"paidBps"</span>: <span class="p">142.10392095776402</span>, <span class="k">"bestSingleBps"</span>: <span class="p">20.00000000000001</span>, <span class="k">"topProvider"</span>: <span class="y">"Koywe"</span> }
-  ]
-}</pre>
-    </div>
+    <dl class="points">
+      <div><dt>Runs on your machine</dt><dd>A small script with no dependencies and no network calls. Read it before you run it.</dd></div>
+      <div><dt>SHA-256 fingerprint</dt><dd>The file you send is hashed, and your report prints the same hash, so you can prove it was built from that exact file.</dd></div>
+      <div><dt>No custody, no logins</dt><dd>We never hold funds, never ask for venue credentials and never place a trade.</dd></div>
+      <div><dt>Used once</dt><dd>Deleted on request, under a mutual NDA and a data processing agreement. Or share your screen and send nothing.</dd></div>
+    </dl>
   </div>
 </section>
 
@@ -322,6 +247,7 @@ Review safe.csv. It is the only file you would send, and the report you get back
       <details><summary>Where do the venue prices come from?</summary><p>Public quotes read at several ticket sizes wherever a venue publishes them, including exchange order books and on-chain aggregators. OTC desks and off-ramps quote privately, so their prices are modeled and marked as estimates.</p></details>
       <details><summary>Is our file encrypted?</summary><p>The anonymizer removes everything except six columns, then computes a SHA-256 hash of the file. The hash is a fingerprint, not encryption: it proves which file a report was built from. For transfer we use whatever secure channel you prefer, or a screen share where nothing is sent.</p></details>
       <details><summary>Do you execute or hold funds?</summary><p>No. BPSMeter is analytics software. Your team executes every trade on its own accounts.</p></details>
+      <details><summary>What do we get back?</summary><p>A cost report with every payout repriced against the cheapest venue that would have taken that exact ticket, and a routing sheet with the venue to use in each corridor at each ticket size. Tickets we can't price are listed with the reason, never dropped. PDF for your finance team, JSON for your engineers.</p></details>
       <details><summary>How long does a report take?</summary><p>A few days from receiving the file.</p></details>
     </div>
   </div>
