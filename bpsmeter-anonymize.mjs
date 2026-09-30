@@ -617,7 +617,10 @@ function runAnonymize({ input, out, providerCol, saltFile, refRatesFile, publicK
   log(res.dropped.length
     ? `dropped (never leaves your machine): ${res.dropped.join(", ")}`
     : `dropped: nothing extra, the file already had only safe columns`);
-  if (saltPath) log(`ref_h: "${res.refColumn}" is sent only as a keyed hash; its salt stays on this machine at ${saltPath}`);
+  if (saltPath) {
+    const shown = saltPath.startsWith(process.cwd() + "/") ? saltPath.slice(process.cwd().length + 1) : saltPath;
+    log(`ref_h: "${res.refColumn}" is sent only as a keyed hash; its salt stays on this machine at ${shown}`);
+  }
   for (const h of res.partyDropped) {
     log(`note: "${h}" looks like a counterparty or customer column and was dropped; if it actually names the venue, rerun with --provider-col "${h}"`);
   }
