@@ -3,7 +3,9 @@
 //
 // WHAT IT DOES
 //   Reads your raw export (CSV or JSON), keeps only date, corridor, provider, notional_usd, fee_usd
-//   and bps, writes them to safe.csv, lists every column it dropped and every provider value it kept,
+//   and bps (plus bps_basis, a label saying whether that cost came from a stated fee or from the
+//   executed rate against mid), writes them to safe.csv, lists every column it dropped and every
+//   provider value it kept,
 //   prints the SHA-256 of your input and of safe.csv, and encrypts safe.csv to BPSMeter's public key
 //   (embedded below, fingerprint ca78c8349b049470) as safe.csv.bpsm. Send safe.csv.bpsm.
 //   If the export has a payment id column, safe.csv also carries ref_h: a keyed hash of the id under
@@ -66,9 +68,12 @@ const PROVIDER_VENUE_ALIASES = ["provider", "provider_name", "venue", "execution
 
 const PROVIDER_PARTY_ALIASES = ["counterparty", "partner", "psp", "vendor"];
 
+// Within each field the aliases are in order of preference: when an export carries several columns that
+// could be the same field (an `amount` in the payout currency next to an `amount_usd`), the one listed
+// first wins, whatever the column order in the file, and the others are reported as not used.
 const FIELD_ALIASES = {
   date: ["date", "trade_date", "tradedate", "value_date", "valuedate", "settlement_date", "settled_at",
-         "executed_at", "execution_date", "exec_date", "timestamp", "created_at", "booked_at", "payment_date"],
+         "executed_at", "execution_date", "exec_date", "payment_date", "booked_at", "timestamp", "created_at"],
   corridor: ["corridor", "pair", "currency_pair", "ccy_pair", "fx_pair", "route", "market", "symbol", "lane"],
   sellCcy: ["sell_currency", "sell_ccy", "base_currency", "base_ccy", "from_currency", "source_currency",
             "debit_currency", "ccy_from", "funding_currency", "send_currency"],
@@ -76,15 +81,28 @@ const FIELD_ALIASES = {
            "destination_currency", "credit_currency", "ccy_to", "payout_currency", "receive_currency"],
   provider: [...PROVIDER_VENUE_ALIASES, ...PROVIDER_PARTY_ALIASES],
   notionalUsd: ["notional_usd", "usd_notional", "amount_usd", "usd_amount", "principal_usd", "usd_value",
-                "gross_usd", "notional", "amount", "sell_amount", "send_amount", "trade_amount", "volume_usd"],
-  feeUsd: ["fee_usd", "fees_usd", "total_fee_usd", "cost_usd", "fee_amount_usd", "spread_usd", "all_in_cost_usd",
+                "gross_usd", "volume_usd", "notional", "amount", "sell_amount", "send_amount", "trade_amount"],
+  feeUsd: ["fee_usd", "fees_usd", "total_fee_usd", "fee_amount_usd", "all_in_cost_usd", "cost_usd", "spread_usd",
            "fee_amount", "fee", "fees", "cost"],
-  bps: ["bps", "bps_charged", "fee_bps", "all_in_bps", "spread_bps", "markup_bps", "total_bps", "cost_bps"],
-  rate: ["rate", "fx_rate", "executed_rate", "exec_rate", "fill_rate", "client_rate", "price", "applied_rate"],
+  bps: ["bps", "bps_charged", "all_in_bps", "total_bps", "cost_bps", "fee_bps", "spread_bps", "markup_bps"],
+  bpsBasis: ["bps_basis"],
+  rate: ["executed_rate", "exec_rate", "fill_rate", "client_rate", "applied_rate", "fx_rate", "rate", "price"],
   midRate: ["mid", "mid_rate", "midmarket_rate", "mid_market_rate", "reference_rate", "benchmark_rate",
             "interbank_rate", "market_rate", "spot_mid"],
-  ref: ["id", "fill_id", "trade_id", "txn_id", "transaction_id", "payment_id", "reference", "external_id", "ref_h"],
+  ref: ["payment_id", "transaction_id", "txn_id", "trade_id", "fill_id", "reference", "external_id", "ref_h", "id"],
 };
+
+// How a fill's cost was established. A cost derived from the executed rate against mid can legitimately be
+// below zero (a fill better than mid); a stated fee or bps cannot.
+const BPS_BASES = ["explicit_bps", "fee_plus_spread", "fee_over_notional", "rate_vs_mid"];
+
+const RATE_DERIVED = new Set(["fee_plus_spread", "rate_vs_mid"]);
+
+// No all-in cost above this is a payout fill; it is a units error (a misread thousands separator, a fee in
+// the wrong currency) and is rejected with that reason rather than allowed to dominate a report.
+const MAX_PLAUSIBLE_BPS = 5000;
+
+const MIN_RATE_DERIVED_BPS = -500;
 
 const CANON_BY_ALIAS = (() => {
   const m = new Map();
@@ -137,12 +155,17 @@ function parseNumberEx(raw) {
   if (!s || /^(n\/?a|null|none|-|—)$/i.test(s)) return { value: null, percent: false };
   const negParen = /^\(.*\)$/.test(s);
   const percent = /%/.test(s);
-  s = s.replace(/[()]/g, "").replace(/[$€£¥]/g, "").replace(/\s/g, "")
+  // Spaces (incl. no-break), apostrophes ("1'234'567", Swiss) and the Unicode minus are formatting only.
+  s = s.replace(/[()]/g, "").replace(/[$€£¥]/g, "").replace(/[\s'’]/g, "").replace(/−/g, "-")
        .replace(/(bps|bp|pips?|usd|%)/gi, "");
-  // EU decimal comma: "1.234,56" or "1234,56" (comma is last separator and 1-2 trailing digits)
+  // Separators. With both a comma and a dot, whichever comes last is the decimal mark ("1.234.567,89" EU,
+  // "1,234,567.89" US). A lone comma followed by 1-2 digits is a decimal comma ("12,5"); any other comma
+  // is a thousands separator. More than one dot can only be thousands ("1.234.567").
   const lastComma = s.lastIndexOf(","), lastDot = s.lastIndexOf(".");
-  if (lastComma > lastDot && /,\d{1,2}$/.test(s)) s = s.replace(/\./g, "").replace(",", ".");
-  else s = s.replace(/,/g, "");
+  const commas = (s.match(/,/g) || []).length, dots = (s.match(/\./g) || []).length;
+  if (commas && dots) s = lastComma > lastDot ? s.replace(/\./g, "").replace(",", ".") : s.replace(/,/g, "");
+  else if (commas) s = commas === 1 && /,\d{1,2}$/.test(s) ? s.replace(",", ".") : s.replace(/,/g, "");
+  else if (dots > 1) s = s.replace(/\./g, "");
   const n = parseFloat(s);
   if (!isFinite(n)) return { value: null, percent };
   let v = negParen ? -n : n;
@@ -152,22 +175,55 @@ function parseNumberEx(raw) {
 
 function parseNumber(raw) { return parseNumberEx(raw).value; }
 
-function parseDate(raw) {
-  if (!raw) return null;
+// A calendar date, or null when the parts do not form one (month 13, 31 June, a year outside 1990-2100).
+function ymd(y, m, d) {
+  if (!(y >= 1990 && y <= 2100 && m >= 1 && m <= 12 && d >= 1)) return null;
+  if (d > new Date(Date.UTC(y, m, 0)).getUTCDate()) return null;
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+const SLASH_DATE = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?=$|[T\s,])/;
+
+const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+
+/**
+ * Parse a date cell to YYYY-MM-DD, or null when it is not a real calendar date. `order` says how to read
+ * an all-numeric slashed date: "mdy" (US, the default) or "dmy" (day first). Dotted dates ("17.06.2026")
+ * are always day first. A bare number (an epoch or a serial) is not guessed at.
+ */
+function parseDate(raw, { order = "mdy" } = {}) {
+  if (raw === null || raw === undefined) return null;
   const s = String(raw).trim();
+  if (!s) return null;
   let m;
-  if ((m = s.match(/^(\d{4})-(\d{2})-(\d{2})/))) return `${m[1]}-${m[2]}-${m[3]}`;
-  if ((m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/))) {            // US M/D/YYYY
-    return `${m[3]}-${String(m[1]).padStart(2, "0")}-${String(m[2]).padStart(2, "0")}`;
+  if ((m = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})(?=$|[T\s])/))) return ymd(+m[1], +m[2], +m[3]);
+  if ((m = s.match(/^(\d{4})(\d{2})(\d{2})$/))) return ymd(+m[1], +m[2], +m[3]);
+  if ((m = s.match(SLASH_DATE))) return order === "dmy" ? ymd(+m[3], +m[2], +m[1]) : ymd(+m[3], +m[1], +m[2]);
+  if ((m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?=$|[T\s,])/))) return ymd(+m[3], +m[2], +m[1]);
+  if ((m = s.match(/^(\d{1,2})[-\s]([A-Za-z]{3})[A-Za-z]*[-\s,]+(\d{4})/))) {     // 03-Jun-2026, 17 June 2026
+    const mo = MONTHS[m[2].toLowerCase()];
+    return mo ? ymd(+m[3], mo, +m[1]) : null;
   }
-  if ((m = s.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})/))) {          // 03-Jun-2026
-    const months = { jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12 };
-    const mo = months[m[2].toLowerCase()];
-    if (mo) return `${m[3]}-${String(mo).padStart(2, "0")}-${String(m[1]).padStart(2, "0")}`;
+  if (/^\d+(\.\d+)?$/.test(s) || /^\d{1,4}[-\/.]\d{1,2}[-\/.]\d{1,4}/.test(s)) return null;
+  const d = new Date(s);                       // "Jun 17, 2026" and similar; read in local time, as written
+  if (isNaN(d.getTime())) return null;
+  return ymd(d.getFullYear(), d.getMonth() + 1, d.getDate());
+}
+
+// Which way round a file writes its all-numeric slashed dates. A first field above 12 can only be a day,
+// a second field above 12 can only be a day; a file whose every date fits both readings is ambiguous.
+function detectDateOrder(cells) {
+  let dmy = 0, mdy = 0, ambiguous = 0;
+  for (const c of cells) {
+    const m = String(c ?? "").trim().match(SLASH_DATE);
+    if (!m) continue;
+    const a = +m[1], b = +m[2];
+    if (a > 12 && b <= 12) dmy++;
+    else if (b > 12 && a <= 12) mdy++;
+    else if (a !== b) ambiguous++;
   }
-  const d = new Date(s);
-  if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
-  return null;
+  const order = dmy > mdy ? "dmy" : "mdy";
+  return { order, dmy, mdy, ambiguous, conflicting: dmy > 0 && mdy > 0, decided: dmy > 0 || mdy > 0 };
 }
 
 const CCY = /^[A-Z]{3}$/;
@@ -208,6 +264,7 @@ function refMidFor(refRates, corridor, date, maxDays = 4) {
   if (!refRates || !date) return null;
   const ccy = String(corridor || "").split("-")[1];
   const t = Date.parse(`${date}T00:00:00Z`);
+  if (!Number.isFinite(t)) return null;
   for (let d = 0; d <= maxDays; d++) {
     const day = new Date(t - d * 864e5).toISOString().slice(0, 10);
     const v = refRates.get(`${ccy}|${day}`);
@@ -216,41 +273,91 @@ function refMidFor(refRates, corridor, date, maxDays = 4) {
   return null;
 }
 
-// "USDMXN", "USD/MXN", "usd_mxn", "USD-MXN", "MXN" (implied USD leg) -> "USD-MXN"
-function normalizeCorridor(raw, sellCcy, buyCcy) {
-  if (raw) {
-    const s = String(raw).trim().toUpperCase().replace(/\s+/g, "");
-    let m;
-    if ((m = s.match(/^([A-Z]{3})[\/\-_. ]?([A-Z]{3})$/))) return `${m[1]}-${m[2]}`;
-    if (CCY.test(s)) return `USD-${s}`;
+// Stablecoin tickers settle the fiat they track: a USDC→MXNe fill is a USD-MXN payout. Upper-cased.
+const STABLECOIN_FIAT = {
+  USDC: "USD", USDT: "USD", USDP: "USD", PYUSD: "USD", USDS: "USD", USDG: "USD", DAI: "USD", FDUSD: "USD", RLUSD: "USD", TUSD: "USD",
+  EURC: "EUR", EUROC: "EUR", EURS: "EUR", EURT: "EUR", EURE: "EUR", EURCV: "EUR", EURR: "EUR",
+  MXNE: "MXN", MXNB: "MXN", MXNT: "MXN", BRLA: "BRL", BRZ: "BRL", WBRL: "BRL", BRL1: "BRL",
+  CCOP: "COP", WCOP: "COP", COPM: "COP", CNGN: "NGN", NGNC: "NGN", XSGD: "SGD", GBPT: "GBP", TGBP: "GBP",
+  XCHF: "CHF", ZCHF: "CHF", PHPC: "PHP", IDRT: "IDR", JPYC: "JPY", AUDD: "AUD", CADC: "CAD", QCAD: "CAD", ZARP: "ZAR",
+};
+
+// Currencies the FX market quotes as the BASE against the dollar (EUR/USD, not USD/EUR). A pair label in
+// that convention says nothing about the direction of the payout, so it is read as a USD payout into them.
+const USD_QUOTED_BASES = new Set(["EUR", "GBP", "AUD", "NZD"]);
+
+const fiatOf = t => STABLECOIN_FIAT[t] || (CCY.test(t) ? t : null);
+
+// A corridor label, a stablecoin pair, or a sell/buy currency pair -> { corridor: "USD-MXN", flipped }.
+// `flipped` marks a G10 pair label written in market convention (EUR/USD) read as a USD→EUR payout.
+function readCorridor(raw, sellCcy, buyCcy) {
+  if (raw !== null && raw !== undefined && String(raw).trim()) {
+    const s = String(raw).trim().toUpperCase().replace(/\s*(->|→|=>|>)\s*/g, "/");
+    const parts = s.split(/[\/\-_.:\s]+/).filter(Boolean);
+    let a = null, b = null;
+    if (parts.length === 2) { a = fiatOf(parts[0]); b = fiatOf(parts[1]); }
+    else if (parts.length === 1) {
+      const t = parts[0];
+      if (fiatOf(t)) { a = "USD"; b = fiatOf(t); }
+      else for (let i = 3; i <= t.length - 3 && !(a && b); i++) { a = fiatOf(t.slice(0, i)); b = fiatOf(t.slice(i)); if (!(a && b)) a = b = null; }
+    }
+    if (a && b && a !== b) {
+      if (b === "USD" && USD_QUOTED_BASES.has(a)) return { corridor: `USD-${a}`, flipped: true };
+      return { corridor: `${a}-${b}`, flipped: false };
+    }
   }
-  const a = sellCcy ? String(sellCcy).trim().toUpperCase() : null;
-  const b = buyCcy ? String(buyCcy).trim().toUpperCase() : null;
-  if (a && b && CCY.test(a) && CCY.test(b)) return `${a}-${b}`;
-  if (b && CCY.test(b)) return `USD-${b}`;
-  return null;
+  const a = sellCcy ? fiatOf(String(sellCcy).trim().toUpperCase()) : null;
+  const b = buyCcy ? fiatOf(String(buyCcy).trim().toUpperCase()) : null;
+  if (a && b && a !== b) return { corridor: `${a}-${b}`, flipped: false };
+  if (!a && b && b !== "USD") return { corridor: `USD-${b}`, flipped: false };
+  return { corridor: null, flipped: false };
 }
 
 // `providerCol` pins the provider to one named column (matched as written or by normalized name).
 // `venueProviderOnly` refuses party-style provider aliases, so such a column stays unmapped.
+// Each canonical field takes the most specific matching column (earliest in its alias list); every other
+// column that also matched is returned in `shadowed`, so it can be reported rather than silently ignored.
 function mapHeaders(headers, { providerCol, venueProviderOnly } = {}) {
   const mapping = {};      // canonical -> source column name
   const unmapped = [];
+  const shadowed = [];     // { column, field, used }
   let pinned = null;
   if (providerCol) {
     pinned = headers.find(h => h === providerCol) ?? headers.find(h => normalizeHeader(h) === normalizeHeader(providerCol));
     if (pinned === undefined) throw new Error(`--provider-col "${providerCol}" is not a column. Columns seen: ${headers.join(", ")}`);
     mapping.provider = pinned;
   }
+  const candidates = new Map();
   headers.forEach(h => {
     if (h === pinned) return;
     const norm = normalizeHeader(h);
     let canon = CANON_BY_ALIAS.get(norm);
     if (canon === "provider" && (pinned !== null || (venueProviderOnly && !PROVIDER_VENUE_ALIASES.includes(norm)))) canon = undefined;
-    if (canon && !mapping[canon]) mapping[canon] = h;
-    else if (!canon) unmapped.push(h);
+    if (!canon) { unmapped.push(h); return; }
+    if (!candidates.has(canon)) candidates.set(canon, []);
+    candidates.get(canon).push(h);
   });
-  return { mapping, unmapped };
+  for (const [canon, cols] of candidates) {
+    const rank = h => FIELD_ALIASES[canon].indexOf(normalizeHeader(h));
+    const ordered = [...cols].sort((a, b) => rank(a) - rank(b) || headers.indexOf(a) - headers.indexOf(b));
+    mapping[canon] = ordered[0];
+    for (const h of ordered.slice(1)) shadowed.push({ column: h, field: canon, used: ordered[0] });
+  }
+  return { mapping, unmapped, shadowed };
+}
+
+// A header repeated verbatim would make every row object keep only its LAST value while the mapping names
+// the first. Later repeats are renamed "name (2)" so each column keeps its own values and the first is used.
+function dedupeHeaders(headers) {
+  const seen = new Map(), repeated = [];
+  const out = headers.map(h => {
+    const n = (seen.get(h) || 0) + 1;
+    seen.set(h, n);
+    if (n === 1) return h;
+    repeated.push(h);
+    return `${h} (${n})`;
+  });
+  return { headers: out, repeated: [...new Set(repeated)] };
 }
 
 function rowsFromCsv(text) {
@@ -261,7 +368,7 @@ function rowsFromCsv(text) {
   while (start < lines.length && (!lines[start].trim() || lines[start].trim().startsWith("#"))) start++;
   if (start >= lines.length) return { headers: [], rows: [] };
   const delim = sniffDelimiter(lines[start]);
-  const headers = splitDelimited(lines[start], delim);
+  const { headers, repeated } = dedupeHeaders(splitDelimited(lines[start], delim));
   const rows = [];
   for (let i = start + 1; i < lines.length; i++) {
     if (!lines[i].trim()) continue;
@@ -270,7 +377,7 @@ function rowsFromCsv(text) {
     headers.forEach((h, j) => { row[h] = cols[j] !== undefined ? cols[j] : ""; });
     rows.push({ row, lineNo: i + 1 });
   }
-  return { headers, rows };
+  return { headers, rows, repeated };
 }
 
 function rowsFromJson(text) {
@@ -281,28 +388,31 @@ function rowsFromJson(text) {
   } else {
     data = JSON.parse(trimmed);
     if (!Array.isArray(data)) {
-      const key = ["fills", "trades", "data", "rows", "results", "records"].find(k => Array.isArray(data[k]));
-      if (!key) throw new Error("JSON payload has no array of fills (looked for fills/trades/data/rows/results/records)");
-      data = data[key];
+      const key = data && ["fills", "trades", "data", "rows", "results", "records"].find(k => Array.isArray(data[k]));
+      if (!key && data && typeof data === "object" && !/\n/.test(trimmed)) data = [data];  // one-line NDJSON
+      else if (!key) throw new Error("JSON payload has no array of fills (looked for fills/trades/data/rows/results/records)");
+      else data = data[key];
     }
   }
   const headerSet = new Set();
-  data.forEach(o => Object.keys(o).forEach(k => headerSet.add(k)));
+  if (!Array.isArray(data)) throw new Error("JSON payload has no array of fills");
+  data.forEach(o => { if (o && typeof o === "object") Object.keys(o).forEach(k => headerSet.add(k)); });
   const headers = [...headerSet];
   return { headers, rows: data.map((row, i) => ({ row, lineNo: i + 1 })) };
 }
 
 /**
  * Parse a fills export into normalized fills.
- * Returns { fills, rejected, mapping, unmapped, format, warnings }.
+ * Returns { fills, rejected, mapping, unmapped, shadowed, format, warnings, dateOrder }.
  * Each fill: { ref, date, corridor, provider, notionalUsd, bpsCharged, bpsBasis, feeUsd, spreadBps, raw, lineNo }
  * `refRates` (Map "CCY|YYYY-MM-DD" -> local per USD) supplies the day's mid when the export has an
- * executed rate but no mid column.
+ * executed rate but no mid column. `dateOrder` ("mdy" | "dmy") overrides the per-file detection of how
+ * slashed dates are written.
  */
-function parseFills(text, { format, refRates = null, providerCol, venueProviderOnly } = {}) {
+function parseFills(text, { format, refRates = null, providerCol, venueProviderOnly, dateOrder } = {}) {
   const fmt = format || (text.trim().startsWith("[") || text.trim().startsWith("{") ? "json" : "csv");
-  const { headers, rows } = fmt === "json" ? rowsFromJson(text) : rowsFromCsv(text);
-  const { mapping, unmapped } = mapHeaders(headers, { providerCol, venueProviderOnly });
+  const { headers, rows, repeated = [] } = fmt === "json" ? rowsFromJson(text) : rowsFromCsv(text);
+  const { mapping, unmapped, shadowed } = mapHeaders(headers, { providerCol, venueProviderOnly });
 
   const missing = [];
   if (!mapping.notionalUsd) missing.push("a notional/amount column");
@@ -311,25 +421,46 @@ function parseFills(text, { format, refRates = null, providerCol, venueProviderO
     missing.push("a cost column (bps, or fee amount, or executed-rate + mid-rate)");
   }
   if (missing.length) {
-    const err = new Error(`fills export is missing ${missing.join("; ")}. Columns seen: ${headers.join(", ")}`);
+    const err = new Error(`fills export is missing ${missing.join("; ")}. Columns seen: ${headers.join(", ") || "none"}`);
     err.mapping = mapping;
     throw err;
   }
 
   const fills = [], rejected = [], warnings = [];
+  for (const h of repeated) warnings.push(`the column "${h}" appears more than once; the first one is used and the repeats are ignored.`);
+  for (const s of shadowed) {
+    warnings.push(`"${s.column}" also looks like the ${FIELD_LABEL[s.field] || s.field} column; "${s.used}" was used instead.`);
+  }
   const get = (row, canon) => (mapping[canon] !== undefined ? row[mapping[canon]] : undefined);
-  let assumedUsdCount = 0, missingRef = 0, unknownOrientation = 0;
+
+  // How this file writes slashed dates: stated by the caller, else read off the file itself.
+  const dates = detectDateOrder(mapping.date ? rows.map(r => r.row[mapping.date]) : []);
+  const order = dateOrder || dates.order;
+  if (!dateOrder && dates.conflicting) {
+    warnings.push(`dates in this file are written both day-first and month-first (${dates.dmy} only readable as D/M/YYYY, ${dates.mdy} only as M/D/YYYY); read as ${order === "dmy" ? "D/M/YYYY" : "M/D/YYYY"}, rows that are not a real date that way are rejected.`);
+  } else if (!dateOrder && !dates.decided && dates.ambiguous) {
+    warnings.push(`${dates.ambiguous} date(s) such as 05/06/2026 read the same either way round; they were read as M/D/YYYY (US). If this export writes the day first, rerun with --date-order dmy.`);
+  }
+
+  let assumedUsdCount = 0, missingRef = 0, unknownOrientation = 0, flipped = 0;
   const feeAllIn = !!mapping.feeUsd && /all_in|spread/.test(normalizeHeader(mapping.feeUsd));
+  const notionalIsUsd = !!mapping.notionalUsd && /usd/i.test(normalizeHeader(mapping.notionalUsd));
 
   for (const { row, lineNo } of rows) {
-    const corridor = normalizeCorridor(get(row, "corridor"), get(row, "sellCcy"), get(row, "buyCcy"));
+    if (!row || typeof row !== "object") { rejected.push({ lineNo, reason: "not a record (empty or not an object)", raw: row }); continue; }
+    const cr = readCorridor(get(row, "corridor"), get(row, "sellCcy"), get(row, "buyCcy"));
+    const corridor = cr.corridor;
     const notionalUsd = parseNumber(get(row, "notionalUsd"));
-    const date = parseDate(get(row, "date"));
+    const dateCell = get(row, "date");
+    const date = parseDate(dateCell, { order });
     const provider = (get(row, "provider") ?? "unspecified").toString().trim() || "unspecified";
 
     if (!corridor) { rejected.push({ lineNo, reason: "could not read a currency corridor", raw: row }); continue; }
     if (notionalUsd === null || notionalUsd <= 0) {
       rejected.push({ lineNo, reason: "missing or non-positive notional", raw: row }); continue;
+    }
+    if (date === null && dateCell !== undefined && dateCell !== null && String(dateCell).trim()) {
+      rejected.push({ lineNo, reason: `unreadable date "${String(dateCell).trim().slice(0, 40)}"`, raw: row }); continue;
     }
 
     // Cost. An explicit bps column is the customer's own all-in figure and is taken as stated. Otherwise
@@ -355,10 +486,15 @@ function parseFills(text, { format, refRates = null, providerCol, venueProviderO
     }
     if (rate !== null && mid !== null && mid !== 0) spread = spreadBps(corridor, rate, mid);
     if (rate !== null && mid !== null && spread === null) unknownOrientation++;
-    const feeIsAllIn = feeAllIn;
 
-    if (rawBps !== null) { bpsCharged = rawBps; bpsBasis = "explicit_bps"; feeUsd = (rawBps * notionalUsd) / 1e4; }
-    else if (rawFee !== null && spread !== null && !feeIsAllIn) {
+    if (rawBps !== null) {
+      // A file that went through the anonymizer says how its bps was established, so a rate-derived cost
+      // (which may be negative) survives the round trip exactly.
+      const stated = String(get(row, "bpsBasis") ?? "").trim();
+      bpsCharged = rawBps; bpsBasis = BPS_BASES.includes(stated) ? stated : "explicit_bps";
+      feeUsd = (rawBps * notionalUsd) / 1e4;
+    }
+    else if (rawFee !== null && spread !== null && !feeAllIn) {
       const feeBps = (Math.abs(rawFee) / notionalUsd) * 1e4;
       bpsCharged = feeBps + spread; bpsBasis = "fee_plus_spread";
       feeUsd = (bpsCharged * notionalUsd) / 1e4;
@@ -370,12 +506,16 @@ function parseFills(text, { format, refRates = null, providerCol, venueProviderO
     }
     if (bpsCharged === null) { rejected.push({ lineNo, reason: "no usable cost field on this row", raw: row }); continue; }
     // Only a rate-derived cost can legitimately be below zero (a fill better than mid). A negative
-    // stated fee or bps is a data error.
-    const floor = bpsBasis === "rate_vs_mid" || bpsBasis === "fee_plus_spread" ? -500 : 0;
+    // stated fee or bps is a data error, and so is any cost above MAX_PLAUSIBLE_BPS.
+    const floor = RATE_DERIVED.has(bpsBasis) ? MIN_RATE_DERIVED_BPS : 0;
     if (!isFinite(bpsCharged) || bpsCharged < floor) { rejected.push({ lineNo, reason: `implausible cost (${bpsCharged} bps)`, raw: row }); continue; }
+    if (bpsCharged > MAX_PLAUSIBLE_BPS) {
+      rejected.push({ lineNo, reason: `implausible cost (${Math.round(bpsCharged)} bps, above ${MAX_PLAUSIBLE_BPS}; check the amount and fee units)`, raw: row }); continue;
+    }
 
-    const sellCcy = (get(row, "sellCcy") || "").toString().trim().toUpperCase();
-    if (mapping.notionalUsd && !/usd/i.test(normalizeHeader(mapping.notionalUsd)) && sellCcy && sellCcy !== "USD") assumedUsdCount++;
+    const sellFiat = fiatOf(String(get(row, "sellCcy") ?? "").trim().toUpperCase());
+    if (!notionalIsUsd && sellFiat !== "USD") assumedUsdCount++;
+    if (cr.flipped) flipped++;
 
     fills.push({
       ref: (get(row, "ref") ?? `L${lineNo}`).toString(),
@@ -384,15 +524,19 @@ function parseFills(text, { format, refRates = null, providerCol, venueProviderO
   }
 
   if (assumedUsdCount) {
-    warnings.push(`${assumedUsdCount} row(s) had a non-USD sell currency but the amount column is not USD-labelled; amounts were treated as USD.`);
+    warnings.push(`${assumedUsdCount} row(s) carry their amount in "${mapping.notionalUsd}", which is not labelled USD and has no USD sell currency beside it; the amounts were read as USD.`);
   }
+  if (flipped) warnings.push(`${flipped} row(s) name their pair the way the FX market quotes it (e.g. EUR/USD); they were read as USD payouts into that currency.`);
   if (missingRef) warnings.push(`${missingRef} row(s) had an executed rate but no reference mid for their date; their spread could not be measured.`);
   if (unknownOrientation) warnings.push(`${unknownOrientation} row(s) are in a currency whose rate direction we cannot tell; their spread was not counted.`);
   const noDate = fills.filter(f => !f.date).length;
-  if (noDate) warnings.push(`${noDate} fill(s) had an unreadable date; they are included in totals but excluded from the monthly trend.`);
+  if (noDate) warnings.push(`${noDate} fill(s) had no date; they are included in totals but excluded from the monthly trend.`);
 
-  return { fills, rejected, mapping, unmapped, format: fmt, warnings };
+  return { fills, rejected, mapping, unmapped, shadowed, format: fmt, warnings, dateOrder: order };
 }
+
+const FIELD_LABEL = { notionalUsd: "notional", feeUsd: "fee", bps: "bps", date: "date", ref: "payment id", provider: "provider",
+  corridor: "corridor", sellCcy: "sell currency", buyCcy: "buy currency", rate: "executed rate", midRate: "mid rate", bpsBasis: "bps basis" };
 
 // ==================================================================================================
 // from ingest/refrates.mjs
@@ -495,11 +639,13 @@ function sealBuffer(plaintext, publicKeyPem, { name = "safe.csv" } = {}) {
 
 // The only fields that leave the customer's machine. Nothing here identifies a person or a counterparty.
 // `ref_h` is appended only when the export has a payment id column (see refHash).
-const SAFE_HEADER = ["date", "corridor", "provider", "notional_usd", "fee_usd", "bps"];
+// `bps_basis` says how the cost was established, so a rate-derived cost below zero (a fill better than mid)
+// is read back as exactly that instead of being rejected as a negative stated fee.
+const SAFE_HEADER = ["date", "corridor", "provider", "notional_usd", "fee_usd", "bps", "bps_basis"];
 
 // Canonical fields we legitimately keep (their source columns are the "kept" ones). Everything else
 // in the original file — including any id/reference column — is dropped.
-const KEPT_CANON = ["date", "corridor", "buyCcy", "sellCcy", "provider", "notionalUsd", "feeUsd", "bps", "rate", "midRate"];
+const KEPT_CANON = ["date", "corridor", "buyCcy", "sellCcy", "provider", "notionalUsd", "feeUsd", "bps", "bpsBasis", "rate", "midRate"];
 
 // Column names that usually hold a person or a business on the other side of the payment. The parser
 // already refuses them as the provider here; this names them in the output so the user knows why.
@@ -544,13 +690,15 @@ function loadOrCreateSalt(path = DEFAULT_SALT_FILE) {
  *   rejected, format }.
  * `dropped` is the list of original columns that were removed — so the customer can SEE the PII is gone.
  */
-function anonymizeFills(text, { format, providerCol, salt, refRates = null } = {}) {
-  const { fills, rejected, mapping, unmapped, format: fmt } = parseFills(text, { format, providerCol, venueProviderOnly: true, refRates });
+function anonymizeFills(text, { format, providerCol, salt, refRates = null, dateOrder } = {}) {
+  const { fills, rejected, mapping, unmapped, shadowed, warnings, format: fmt } = parseFills(text, { format, providerCol, venueProviderOnly: true, refRates, dateOrder });
 
   const keptSourceCols = KEPT_CANON.map(c => mapping[c]).filter(Boolean);
   // Dropped = every original column that is not one we keep. Unmapped columns are always dropped;
   // an id/reference column that DID map (to `ref`) is dropped too — only its keyed hash is emitted.
-  const dropped = [...unmapped];
+  // A column that matched a field but lost to a more specific one (an `amount` beside `amount_usd`) is
+  // dropped too, and named, so the list of what stays behind is complete.
+  const dropped = [...unmapped, ...shadowed.map(x => x.column)];
   if (mapping.ref) dropped.push(mapping.ref);
   const partyDropped = unmapped.filter(h => PARTY_COLUMN.test(normalizeHeader(h)));
 
@@ -571,7 +719,7 @@ function anonymizeFills(text, { format, providerCol, salt, refRates = null } = {
   for (const f of fills) {
     const row = [
       csvCell(f.date), csvCell(f.corridor), csvCell(f.provider),
-      csvCell(f.notionalUsd), csvCell(f.feeUsd), csvCell(f.bpsCharged),
+      csvCell(f.notionalUsd), csvCell(f.feeUsd), csvCell(f.bpsCharged), csvCell(f.bpsBasis),
     ];
     if (refColumn) row.push(refCell(f));
     lines.push(row.join(","));
@@ -590,6 +738,7 @@ function anonymizeFills(text, { format, providerCol, salt, refRates = null } = {
     rowsOut: fills.length,
     withSpread: fills.filter(f => f.bpsBasis === "fee_plus_spread" || f.bpsBasis === "rate_vs_mid").length,
     rejected,
+    warnings,
     format: fmt,
   };
 }
@@ -601,13 +750,13 @@ const sha256File = path => createHash("sha256").update(readFileSync(path)).diges
  * Shared by `node cli.mjs anonymize` and the standalone dist/bpsmeter-anonymize.mjs.
  * `publicKeyPem` null means write safe.csv only.
  */
-function runAnonymize({ input, out, providerCol, saltFile, refRatesFile, publicKeyPem, seal = true, log = console.log }) {
+function runAnonymize({ input, out, providerCol, saltFile, refRatesFile, dateOrder, publicKeyPem, seal = true, log = console.log }) {
   const inPath = resolve(input);
   const outPath = out ? resolve(out) : inPath.replace(/\.(csv|json|txt)$/i, "") + ".anonymized.csv";
   let saltPath = null;
   const refRates = refRatesFile ? parseRefRates(readFileSync(resolve(refRatesFile), "utf8")) : null;
   const res = anonymizeFills(readFileSync(inPath, "utf8"), {
-    providerCol, refRates,
+    providerCol, refRates, dateOrder,
     salt: () => loadOrCreateSalt(saltPath = saltFile ? resolve(saltFile) : DEFAULT_SALT_FILE),
   });
   writeFileSync(outPath, res.csv);
@@ -627,6 +776,7 @@ function runAnonymize({ input, out, providerCol, saltFile, refRatesFile, publicK
   if (!res.providerColumn) {
     log(`note: no venue or provider column was kept, so every row is sent as provider "unspecified" and the report cannot compare your venues; name the column that holds the venue with --provider-col`);
   }
+  for (const w of res.warnings) log(`note: ${w}`);
   if (res.rejected.length) log(`note: ${res.rejected.length} unparseable row(s) were left out`);
   if (res.withSpread) log(`cost: ${res.withSpread} row(s) measured as fee plus the spread in the executed rate${refRates ? " (mids from your reference rates)" : ""}`);
   log(`\nprovider values that will be sent (check that none is a person or a customer):`);
@@ -646,7 +796,7 @@ function runAnonymize({ input, out, providerCol, saltFile, refRatesFile, publicK
 }
 
 const USAGE = `usage: node bpsmeter-anonymize.mjs <export.csv|export.json> [--out safe.csv] [--no-seal]
-         [--provider-col NAME] [--salt-file PATH] [--ref-rates date,ccy,rate CSV] [--public-key PEM_FILE]`;
+         [--provider-col NAME] [--salt-file PATH] [--ref-rates date,ccy,rate CSV] [--date-order mdy|dmy] [--public-key PEM_FILE]`;
 
 /**
  * Command-line entry of the standalone script. `publicKeyPem` / `fingerprint` are the inlined BPSMeter
@@ -660,12 +810,13 @@ function anonymizeMain(argv, { publicKeyPem, fingerprint }) {
     if (!a.startsWith("--")) { opts._.push(a); continue; }
     const k = a.slice(2);
     if (flags.has(k)) { opts[k] = true; continue; }
-    if (!["out", "provider-col", "salt-file", "ref-rates", "public-key"].includes(k)) { console.error(`unknown option ${a}\n${USAGE}`); return 2; }
+    if (!["out", "provider-col", "salt-file", "ref-rates", "date-order", "public-key"].includes(k)) { console.error(`unknown option ${a}\n${USAGE}`); return 2; }
     if (argv[i + 1] === undefined) { console.error(`${a} needs a value\n${USAGE}`); return 2; }
     opts[k] = argv[++i];
   }
   if (opts.help) { console.log(USAGE); return 0; }
   if (opts._.length !== 1) { console.error(USAGE); return 2; }
+  if (opts["date-order"] !== undefined && !["mdy", "dmy"].includes(opts["date-order"])) { console.error(`--date-order must be mdy or dmy\n${USAGE}`); return 2; }
 
   let pem = publicKeyPem;
   if (opts["public-key"]) {
@@ -676,7 +827,7 @@ function anonymizeMain(argv, { publicKeyPem, fingerprint }) {
     return 1;
   }
   try {
-    runAnonymize({ input: opts._[0], out: opts.out, providerCol: opts["provider-col"], saltFile: opts["salt-file"], refRatesFile: opts["ref-rates"], publicKeyPem: pem, seal: !opts["no-seal"] });
+    runAnonymize({ input: opts._[0], out: opts.out, providerCol: opts["provider-col"], saltFile: opts["salt-file"], refRatesFile: opts["ref-rates"], dateOrder: opts["date-order"], publicKeyPem: pem, seal: !opts["no-seal"] });
     return 0;
   } catch (e) {
     console.error(`error: ${e.message}`);
